@@ -15,9 +15,11 @@
 </template>
 
 <script setup>
-import {inject, onMounted, reactive, watch} from "vue";
+import {inject, onMounted, reactive, watch, onUnmounted} from "vue";
 import {getById} from "@/utils/util";
 import {useAppStore} from "@/stores/app";
+import * as PIXI from "pixi.js";
+import {Spine} from "pixi-spine";
 
 const appStore = useAppStore()
 
@@ -36,6 +38,196 @@ const data = reactive({
     },
     spineVersion: null
 })
+
+// 存储骨骼名称标签的容器
+const boneLabelsContainers = new Map();
+
+// 创建骨骼名称标签
+function createBoneLabels(spine) {
+    if (!spine || !spine.skeleton || !spine.skeleton.slots) return;
+    
+    // 如果已经为这个spine创建了标签，先清理
+    if (boneLabelsContainers.has(spine)) {
+        const oldData = boneLabelsContainers.get(spine);
+        if (oldData.container.parent) {
+            oldData.container.parent.removeChild(oldData.container);
+        }
+        oldData.container.destroy({ children: true });
+        boneLabelsContainers.delete(spine);
+    }
+    
+    // 创建一个新的容器来存放所有插槽名称标签
+    const labelsContainer = new PIXI.Container();
+    labelsContainer.visible = appStore.showBoneNames;
+    labelsContainer.sortableChildren = true; // 启用排序
+    labelsContainer.zIndex = 1000; // 确保标签显示在最上层
+    
+    // 为每个插槽创建文本标签
+    spine.skeleton.slots.forEach(slot => {
+        // 跳过没有名称的插槽
+        if (!slot.data || !slot.data.name) return;
+        
+        const text = new PIXI.Text(slot.data.name, {
+            fontFamily: 'Arial',
+            fontSize: 12,
+            fill: 0xffffff,
+            align: 'center',
+            stroke: 0x000000,
+            strokeThickness: 3
+        });
+        
+        text.anchor.set(0.5);
+        // 获取插槽所属的骨骼
+        const bone = slot.bone;
+        if (!bone) return;
+        
+        // 计算插槽在世界坐标系中的位置
+        const worldX = spine.x + bone.worldX * spine.scale.x;
+        const worldY = spine.y + bone.worldY * spine.scale.y;
+        text.position.set(worldX, worldY);
+        labelsContainer.addChild(text);
+    });
+    
+    // 将标签容器添加到spine的父容器中
+    if (spine.parent) {
+        spine.parent.addChild(labelsContainer);
+        // 确保容器的排序
+        if (typeof spine.parent.sortChildren === 'function') {
+            spine.parent.sortChildren();
+        }
+    }
+    
+    // 存储标签容器的引用，以便后续更新
+    boneLabelsContainers.set(spine, {
+        container: labelsContainer,
+        slots: spine.skeleton.slots
+    });
+    
+    // 立即更新一次位置
+    updateBoneLabelPosition(spine);
+}
+
+// 更新特定spine的插槽标签位置
+function updateBoneLabelPosition(spine) {
+    if (!boneLabelsContainers.has(spine)) return;
+    
+    const { container, slots } = boneLabelsContainers.get(spine);
+    
+    // 更新每个标签的位置
+    let textIndex = 0;
+    slots.forEach(slot => {
+        // 跳过没有名称的插槽或没有骨骼的插槽
+        if (!slot.data || !slot.data.name || !slot.bone) return;
+        
+        if (textIndex < container.children.length) {
+            const text = container.children[textIndex++];
+            // 获取插槽所属的骨骼
+            const bone = slot.bone;
+            // 计算插槽在世界坐标系中的位置
+            const worldX = spine.x + bone.worldX * spine.scale.x;
+            const worldY = spine.y + bone.worldY * spine.scale.y;
+            text.position.set(worldX, worldY);
+        }
+    });
+}
+
+// 更新骨骼名称标签的位置
+function updateBoneLabels() {
+    boneLabelsContainers.forEach((data, spine) => {
+        const { container } = data;
+        
+        // 更新标签可见性
+        container.visible = appStore.showBoneNames;
+        
+        if (!appStore.showBoneNames) return;
+        
+        // 更新位置
+        updateBoneLabelPosition(spine);
+    });
+}
+
+// 清理骨骼名称标签
+function cleanupBoneLabels() {
+    boneLabelsContainers.forEach((data, spine) => {
+        if (data.container.parent) {
+            data.container.parent.removeChild(data.container);
+        }
+        data.container.destroy({ children: true });
+    });
+    boneLabelsContainers.clear();
+}
+
+// 更新Spine模型，供App.vue调用
+function updateSpineModels() {
+    // 清理旧的标签
+    cleanupBoneLabels();
+    
+    // 为当前活动容器中的所有Spine对象创建新标签
+    const activeContainer = appStore.getActive();
+    if (activeContainer && activeContainer.stage) {
+        // 延迟执行，确保Spine模型已经完全加载
+        setTimeout(() => {
+            console.log("更新骨骼名称标签，当前显示状态:", appStore.showBoneNames);
+            console.log("舞台子元素数量:", activeContainer.stage.children.length);
+            
+            activeContainer.stage.children.forEach(child => {
+                if (child instanceof Spine) {
+                    console.log("找到Spine对象:", child);
+                    createBoneLabels(child);
+                }
+            });
+            
+            // 强制更新一次
+            updateBoneLabels();
+        }, 200); // 增加延迟时间，确保模型完全加载
+    }
+}
+
+// 暴露方法给父组件
+defineExpose({
+    updateSpineModels
+});
+
+// 监听骨骼名称显示开关的变化
+watch(() => appStore.showBoneNames, (show) => {
+    console.log("骨骼名称显示开关变化:", show);
+    
+    boneLabelsContainers.forEach(data => {
+        data.container.visible = show;
+    });
+    
+    // 如果开启显示，强制更新一次位置
+    if (show) {
+        updateBoneLabels();
+    }
+});
+
+// 监听活动容器的变化，更新骨骼名称标签
+watch(() => appStore.activeIndex, () => {
+    // 清理旧的标签
+    cleanupBoneLabels();
+    
+    // 为当前活动容器中的所有Spine对象创建新标签
+    const activeContainer = appStore.getActive();
+    if (activeContainer && activeContainer.stage) {
+        // 延迟执行，确保Spine模型已经完全加载
+        setTimeout(() => {
+            console.log("活动容器变化，更新骨骼名称标签");
+            
+            activeContainer.stage.children.forEach(child => {
+                if (child instanceof Spine) {
+                    createBoneLabels(child);
+                }
+            });
+            
+            // 强制更新一次
+            updateBoneLabels();
+        }, 200); // 增加延迟时间，确保模型完全加载
+    }
+});
+
+// 在每一帧更新骨骼名称标签的位置
+pixiApp.ticker.add(updateBoneLabels);
 
 let resizeTimer, resizeTimer2;
 const displayObserver = new ResizeObserver((entry) => {
@@ -83,7 +275,36 @@ onMounted(() => {
             navigator.clipboard.write([new ClipboardItem({'image/png': blob})])
         })
     })
+    
+    // 初始化骨骼名称标签
+    // 延迟执行，确保Spine模型已经完全加载
+    setTimeout(() => {
+        console.log("初始化骨骼名称标签");
+        
+        const activeContainer = appStore.getActive();
+        if (activeContainer && activeContainer.stage) {
+            activeContainer.stage.children.forEach(child => {
+                if (child instanceof Spine) {
+                    createBoneLabels(child);
+                }
+            });
+            
+            // 强制更新一次
+            updateBoneLabels();
+        }
+    }, 200); // 增加延迟时间，确保模型完全加载
 })
+
+// 在组件销毁时清理资源
+onUnmounted(() => {
+    // 移除ticker
+    if (pixiApp && pixiApp.ticker) {
+        pixiApp.ticker.remove(updateBoneLabels);
+    }
+    
+    // 清理骨骼名称标签
+    cleanupBoneLabels();
+});
 
 pixiApp.view.addEventListener('wheel', (ev) => {
     ev.preventDefault();
@@ -146,7 +367,6 @@ pixiApp.view.addEventListener('pointerup', () => {
 pixiApp.view.addEventListener('pointerout', () => {
     isDragging = false;
 });
-
 
 </script>
 

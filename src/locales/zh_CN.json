@@ -53,7 +53,8 @@
     "saveImage": "保存图片",
     "checkConsole": "Ctrl+Shift+I打开控制台",
     "tips": "鼠标中键收起/展开",
-    "reloadTexture": "重载贴图"
+    "reloadTexture": "重载贴图",
+    "showBoneNames": "显示骨骼名称"
   },
   "error": {
     "textureSizeError": "贴图尺寸与图集不符合！",

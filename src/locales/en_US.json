@@ -53,7 +53,8 @@
     "saveImage": "Save image",
     "checkConsole": "Press Ctrl+Shift+I to open the console",
     "tips": "Middle mouse button collapse/expand",
-    "reloadTexture": "Reload Tex"
+    "reloadTexture": "Reload Tex",
+    "showBoneNames": "Show Bone Names"
   },
   "error": {
     "textureSizeError": "Wrong texture size!",

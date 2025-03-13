@@ -70,6 +70,14 @@
                 {{ $t('globalSide.reloadTexture') }}
             </button>
         </div>
+        <div class="row">
+            <span title="Show Bone Names" style="white-space: nowrap">{{ $t('globalSide.showBoneNames') }}</span>
+            <span class="i-checkbox-wrap">
+                <input type="checkbox" id="show-bone-names" class="i-checkbox"
+                       v-model="appStore.showBoneNames">
+                <label for="show-bone-names" class="i-label"></label>
+            </span>
+        </div>
         <div class="tips">
             <span title="Press Ctrl+Shift+I to open the console">{{ $t('globalSide.checkConsole') }}</span>
             <span title="Middle mouse button collapse/expand">{{ $t('globalSide.tips') }}</span>

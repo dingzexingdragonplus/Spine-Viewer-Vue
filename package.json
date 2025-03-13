@@ -34,7 +34,9 @@
     "productName": "Spine Viewer",
     "asar": false,
     "win": {
-      "icon": "./src/assets/image/otogi.ico"
+      "icon": "./src/assets/image/otogi.ico",
+      "signingHashAlgorithms": null,
+      "signAndEditExecutable": false
     },
     "files": [
       "dist/**/*",

@@ -230,7 +230,7 @@ function onLoaded(loader, res) {
                 [].push.apply(newSkins, currentSkins.filter(s => !newSkins.includes(s)))
                 if (newAnimations.length === 0) {
                     [].push.apply(newAnimations, currentAnimations)
-                } else {
+                
                     const toRemoveIndex = []
                     for (let i = 0; i < newAnimations.length; i++) {
                         if (!currentAnimations.map(a => a.name).includes(newAnimations[i].name)) {
@@ -264,6 +264,15 @@ function onLoaded(loader, res) {
         activeContainer.data.tracks.length = 0
         activeContainer.data.queue.forEach(q => q.length = 0)
         appStore.items[appStore.activeIndex] = activeContainer.name
+        
+        // 通知Scene组件更新骨骼名称标签
+        // 延迟执行，确保Spine模型已经完全加载到舞台
+        setTimeout(() => {
+            console.log("App.vue: 加载完成，更新骨骼名称标签");
+            if (mainStage.value && mainStage.value.updateSpineModels) {
+                mainStage.value.updateSpineModels();
+            }
+        }, 200); // 增加延迟时间，确保模型完全加载
     }
 
     function slotCompare(slot1, slot2) {
