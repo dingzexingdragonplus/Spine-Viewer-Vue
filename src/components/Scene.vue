@@ -110,39 +110,86 @@ function createBoneLabels(spine) {
 // 更新特定spine的插槽标签位置
 function updateBoneLabelPosition(spine) {
     if (!boneLabelsContainers.has(spine)) return;
-    
+
     const { container, slots } = boneLabelsContainers.get(spine);
-    
+
+    // 确保容器是可见的才进行位置更新和重排
+    if (!container.visible) return;
+
     // 更新每个标签的位置
+    const labelPositions = []; // 用于存储已放置标签的边界框
     let textIndex = 0;
+    const padding = 5; // 标签之间的垂直间距
+
     slots.forEach(slot => {
         // 跳过没有名称的插槽或没有骨骼的插槽
         if (!slot.data || !slot.data.name || !slot.bone) return;
-        
+
         if (textIndex < container.children.length) {
             const text = container.children[textIndex++];
             // 获取插槽所属的骨骼
             const bone = slot.bone;
-            // 计算插槽在世界坐标系中的位置
-            const worldX = spine.x + bone.worldX * spine.scale.x;
-            const worldY = spine.y + bone.worldY * spine.scale.y;
+            // 计算插槽在世界坐标系中的初始位置
+            let worldX = spine.x + bone.worldX * spine.scale.x;
+            let worldY = spine.y + bone.worldY * spine.scale.y;
             text.position.set(worldX, worldY);
+
+            // 获取当前标签的边界框
+            let currentBounds = text.getBounds();
+            let overlaps = true;
+            let attempts = 0; // 防止无限循环
+            const maxAttempts = 20; // 最多尝试20次向下移动
+
+            while (overlaps && attempts < maxAttempts) {
+                overlaps = false;
+                for (const placedBounds of labelPositions) {
+                    // 简单的AABB碰撞检测
+                    if (
+                        currentBounds.x < placedBounds.x + placedBounds.width &&
+                        currentBounds.x + currentBounds.width > placedBounds.x &&
+                        currentBounds.y < placedBounds.y + placedBounds.height &&
+                        currentBounds.y + currentBounds.height > placedBounds.y
+                    ) {
+                        overlaps = true;
+                        // 如果重叠，将当前标签向下移动
+                        worldY += currentBounds.height + padding;
+                        text.position.set(worldX, worldY);
+                        currentBounds = text.getBounds(); // 更新边界框
+                        break; // 重新检查所有已放置的标签
+                    }
+                }
+                attempts++;
+            }
+             // 如果尝试次数过多仍重叠，则将其移回原始位置（或提供其他回退逻辑）
+             if (attempts >= maxAttempts && overlaps) {
+                 console.warn(`Could not resolve overlap for label "${slot.data.name}" after ${maxAttempts} attempts.`);
+                 worldY = spine.y + bone.worldY * spine.scale.y; // Reset to original Y
+                 text.position.set(worldX, worldY);
+                 currentBounds = text.getBounds(); // Reset bounds
+            }
+
+
+            // 添加当前标签的最终位置到已放置列表
+            labelPositions.push(currentBounds);
         }
     });
 }
 
-// 更新骨骼名称标签的位置
+// 更新骨骼名称标签的位置和可见性
 function updateBoneLabels() {
     boneLabelsContainers.forEach((data, spine) => {
         const { container } = data;
-        
+
         // 更新标签可见性
-        container.visible = appStore.showBoneNames;
-        
-        if (!appStore.showBoneNames) return;
-        
-        // 更新位置
-        updateBoneLabelPosition(spine);
+        const shouldBeVisible = appStore.showBoneNames && spine.parent !== null; // 只有当spine在舞台上时才显示标签
+        if (container.visible !== shouldBeVisible) {
+            container.visible = shouldBeVisible;
+        }
+
+        // 如果可见，则更新位置
+        if (container.visible) {
+            updateBoneLabelPosition(spine);
+        }
     });
 }
 
